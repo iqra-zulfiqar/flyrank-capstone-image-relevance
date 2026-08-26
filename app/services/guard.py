@@ -46,9 +46,12 @@ def evaluate_guard(
     """
     Runs the guard checks in order, first failure wins:
       1. Confidence floor — never recommend a low-confidence/flagged image
-      2. Similarity floor — the embeddings must actually be close
-      3. Subject/category match — the specific thing must match, not
-         just "same general vibe" (this is the fox-vs-wolf trap)
+      2. Subject/category match — the specific thing must match, not
+         just "same general vibe" (this is the fox-vs-wolf trap). Checked
+         before similarity so a category mismatch is reported as exactly
+         that, rather than being masked by a low similarity score that
+         would have failed anyway.
+      3. Similarity floor — the embeddings must actually be close
 
     Returns (passed: bool, reason: Optional[str]). reason is always a
     human-readable explanation when passed=False; None when passed=True.
@@ -57,13 +60,6 @@ def evaluate_guard(
         return False, (
             f"Image classification is low-confidence ({image_confidence:.2f}) "
             f"or flagged — cannot recommend an uncertain classification."
-        )
-
-    if similarity < settings.SIMILARITY_THRESHOLD:
-        return False, (
-            f"Similarity {similarity:.2f} below threshold "
-            f"{settings.SIMILARITY_THRESHOLD:.2f} — image and post content "
-            f"aren't semantically close enough."
         )
 
     post_text = f"{post_title} {post_body}"
@@ -78,5 +74,12 @@ def evaluate_guard(
                 f"Category mismatch: expected '{expected_subject}', "
                 f"detected '{detected_subject or image_subject}'"
             )
+
+    if similarity < settings.SIMILARITY_THRESHOLD:
+        return False, (
+            f"Similarity {similarity:.2f} below threshold "
+            f"{settings.SIMILARITY_THRESHOLD:.2f} — image and post content "
+            f"aren't semantically close enough."
+        )
 
     return True, None

@@ -93,16 +93,64 @@ of it wasn't a first-try success.
    first attempt — proof the retry logic works for real, not just in
    theory).
 
-**What I'd do differently next time:** confirm the free-tier quota
-situation for whichever model I plan to use *before* building the whole
-pipeline around it, rather than discovering it mid-Phase-2. I'd also ask
-for the terminal traceback earlier when something says "Internal Server
-Error" instead of assuming a restart will fix it.
+---
+
+## Phase 3 — Matching Engine + Mismatch Guard
+
+**AI helped with:**
+- Designing the embedding pipeline (defaulted to local Ollama `all-minilm`
+  from the start this time, learning from Phase 2's Gemini quota pain —
+  didn't wait to hit the same wall twice).
+- Writing the mismatch guard (`guard.py`) with a simple, deterministic
+  keyword-based subject extraction rather than a second LLM call — kept
+  it fast and explainable rather than sophisticated.
+- Adding a `force-match` endpoint specifically so the brief's "watch it
+  refuse the wolf" demo moment is reproducible on command, rather than
+  hoping a wolf image ranks high enough naturally to reach the guard.
+
+**Real issues I hit and how they got fixed:**
+
+1. **Similarity threshold was wrong on the first try.** Set to 0.75
+   (a value that seemed reasonable from general embedding-similarity
+   conventions), but the fox post's actual best match only scored 0.63
+   — correctly ranked, but rejected by an unrealistic threshold. Fixed
+   by actually looking at real similarity scores from my own corpus
+   (0.60-0.65 for genuine matches, ~0.28 for genuinely unrelated
+   content) and setting the threshold to 0.5, in between. This is
+   exactly the kind of threshold tuning the brief describes (§2:
+   "you'll pick thresholds using your own labeled eval set — and defend
+   the fox/wolf boundary at the demo with a precision number, not a
+   feeling") — I initially skipped the "using real data" part and had
+   to go back and do it properly.
+
+2. **The guard's check order hid its best feature.** When I forced a
+   wolf image onto the fox post, the guard correctly rejected it — but
+   the reason given was "similarity too low," not "category mismatch."
+   Both are true, but the similarity check ran first and short-circuited
+   before the category check ever ran. Since the brief's whole demo
+   moment is specifically about *category* mismatch (fox vs. wolf, not
+   just "unrelated"), I reordered the checks so subject/category runs
+   before similarity. This was a genuine design bug, not a display
+   issue — a system that only ever says "too dissimilar" isn't
+   demonstrating the specific safety property the guard is meant to
+   have.
+
+3. **Approving a rejected suggestion needed an explicit block.** Wrote
+   the `/suggestions/{id}/approve` endpoint to check `guard_passed`
+   before allowing approval — otherwise the review workflow would let a
+   human silently override the guard's safety verdict through a
+   different API path, defeating the whole point of having a guard.
+   Verified this with the houseplants "no confident match" suggestion:
+   attempting to approve it correctly returns a 400 with the guard's
+   original rejection reason.
+
+**What I'd do differently next time:** get real similarity-score data
+from the actual corpus *before* picking a threshold, rather than
+guessing a plausible-sounding number first and discovering it's wrong
+via a failed demo test. Also worth deciding guard check order up front
+based on "what does this check specifically prove" rather than
+whatever order felt natural to write first.
 
 ---
 
-## Ongoing
 
-Will keep updating this file per phase, and reference specific line
-ranges when asked to explain code at the demo rather than pointing at
-whole files.

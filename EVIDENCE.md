@@ -143,3 +143,128 @@ per-call charge; the plumbing for cost tracking is proven functional by
 the non-zero `cost_usd` on the earlier Gemini-based job attempts).
 
 ---
+
+## Phase 3 — Matching Engine + Mismatch Guard
+
+### ✅ Embeddings for images + posts
+
+`POST /jobs/embed` completed cleanly on the first run using local Ollama
+(`all-minilm`) — no rate-limit issues, unlike the earlier Gemini vision
+attempts in Phase 2:
+
+![Embed job completed](./evidence/embed-job-done.png)
+
+```json
+{
+  "job_type": "embed",
+  "status": "done",
+  "total_items": 50,
+  "completed": 50,
+  "failed": 0,
+  "retries": 0,
+  "total_cost_usd": 0
+}
+```
+
+### ✅ Similarity search + ranking (semantic, not keyword)
+
+Fox post ("The behavior of red foxes") ranks fox images at the top by
+embedding similarity — proves matching works on meaning, not exact
+wording (post text never says "red fox" using the same phrasing as any
+image caption):
+
+![Fox post ranks fox image first](./evidence/fox-post-matched.png)
+
+```json
+{
+  "matched": true,
+  "suggested_image_id": "73628721-997b-44c2-9a2c-43fc7a88015a",
+  "similarity": 0.6308,
+  "candidates": [
+    {"subject": "red fox", "similarity": 0.6308, "guard_passed": true},
+    {"subject": "red fox", "similarity": 0.6147, "guard_passed": true}
+  ]
+}
+```
+
+Symmetry check — a wolf-themed post independently ranks a wolf image top
+(proves the system isn't fox-biased, ranking genuinely reflects content):
+
+![Wolf post ranks wolf image first](./evidence/wolf-post-matched.png)
+
+```json
+{
+  "matched": true,
+  "suggested_image_id": "c1a892fd-d6f7-421a-b539-7a92c8e7fa2e",
+  "similarity": 0.6724,
+  "candidates": [
+    {"subject": "wolf pack", "similarity": 0.6724, "guard_passed": true},
+    {"subject": "wolf", "similarity": 0.6312, "guard_passed": true}
+  ]
+}
+```
+
+### ✅ The mismatch guard rejects incorrect recommendations (the core demo moment)
+
+Forced a wolf image as a candidate for the fox post via
+`POST /posts/{id}/force-match/{image_id}` — the guard correctly refuses
+it with a specific, human-readable category-mismatch reason, matching
+the brief's own example almost verbatim (§4):
+
+![Guard rejects wolf on fox post](./evidence/guard-rejects-wolf.png)
+
+```json
+{
+  "subject": "wolf",
+  "similarity": 0.3853,
+  "guard_passed": false,
+  "guard_reason": "Category mismatch: expected 'fox', detected 'wolf'"
+}
+```
+
+### ✅ "No confident match" + reasons
+
+A houseplants post (no animal content at all) correctly returns
+`matched: false` rather than forcing a bad suggestion:
+
+![No confident match for unrelated post](./evidence/no-confident-match.png)
+
+```json
+{
+  "matched": false,
+  "suggested_image_id": null,
+  "reason": "Similarity 0.28 below threshold 0.50 — image and post content aren't semantically close enough.",
+  "candidates": [
+    {"subject": "red fox", "similarity": 0.2805, "guard_passed": false},
+    {"subject": "wolf pack", "similarity": 0.2801, "guard_passed": false}
+  ]
+}
+```
+
+### ✅ Review workflow — approve / reject / inspect, guard can't be bypassed
+
+Approving a guard-passed suggestion succeeds:
+
+![Approve a guard-passed suggestion](./evidence/suggestion-approved.png)
+
+```json
+{"status": "approved", "guard_passed": true, "similarity": 0.6724}
+```
+
+Approving a guard-**rejected** suggestion (the houseplants "no confident
+match" case) is correctly blocked with a 400 — the review API cannot be
+used to silently override the guard's safety verdict:
+
+![Approve blocked on rejected suggestion](./evidence/approve-blocked.png)
+
+```json
+{
+  "detail": "Cannot approve a suggestion the guard rejected. Guard reason: Similarity 0.28 below threshold 0.50 — image and post content aren't semantically close enough."
+}
+```
+
+### ✅ Gate: "fox post ranks fox first; guard refuses the wolf"
+
+Satisfied by the fox-post-matched and guard-rejects-wolf evidence above.
+
+---
