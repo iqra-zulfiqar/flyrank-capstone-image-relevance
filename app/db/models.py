@@ -59,3 +59,48 @@ class BatchJob(Base):
     error_log = Column(Text, nullable=True)  # newline-separated per-item errors
     created_at = Column(DateTime(timezone=True), default=now_utc)
     finished_at = Column(DateTime(timezone=True), nullable=True)
+
+
+class ImageVector(Base):
+    __tablename__ = "image_vectors"
+
+    image_id = Column(UUID(as_uuid=True), ForeignKey("images.id", ondelete="CASCADE"), primary_key=True)
+    embedding = Column(ARRAY(Float), nullable=False)
+    model_used = Column(Text, nullable=False)
+    created_at = Column(DateTime(timezone=True), default=now_utc)
+
+
+class Post(Base):
+    __tablename__ = "posts"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    title = Column(Text, nullable=False)
+    body = Column(Text, nullable=False)
+    created_at = Column(DateTime(timezone=True), default=now_utc)
+
+    vector = relationship("PostVector", back_populates="post", uselist=False, cascade="all, delete-orphan")
+
+
+class PostVector(Base):
+    __tablename__ = "post_vectors"
+
+    post_id = Column(UUID(as_uuid=True), ForeignKey("posts.id", ondelete="CASCADE"), primary_key=True)
+    embedding = Column(ARRAY(Float), nullable=False)
+    model_used = Column(Text, nullable=False)
+    created_at = Column(DateTime(timezone=True), default=now_utc)
+
+    post = relationship("Post", back_populates="vector")
+
+
+class Suggestion(Base):
+    __tablename__ = "suggestions"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    post_id = Column(UUID(as_uuid=True), ForeignKey("posts.id", ondelete="CASCADE"), nullable=False, index=True)
+    image_id = Column(UUID(as_uuid=True), ForeignKey("images.id", ondelete="SET NULL"), nullable=True)
+    similarity = Column(Float, nullable=True)
+    guard_passed = Column(Boolean, nullable=False)
+    guard_reason = Column(Text, nullable=True)
+    status = Column(Text, nullable=False, default="pending", index=True)  # pending/approved/rejected
+    created_at = Column(DateTime(timezone=True), default=now_utc)
+    reviewed_at = Column(DateTime(timezone=True), nullable=True)

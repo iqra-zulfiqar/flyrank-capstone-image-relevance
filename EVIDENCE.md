@@ -40,7 +40,7 @@ schema-valid, per-image structured output (not hardcoded — subject,
 category, attributes, caption, and confidence all vary correctly per
 image):
 
-![Tagged image example](./image2.png)
+![Tagged image example](./evidence/image2.png)
 
 ```json
 {
@@ -63,7 +63,7 @@ all 50 images passed confidently, so this correctly returns an empty
 array (the flagging mechanism has nothing to flag when confidence is
 high):
 
-![No flagged images on successful run](./Image3.png)
+![No flagged images on successful run](./evidence/Image3.png)
 
 ```json
 []
@@ -83,7 +83,7 @@ retries were automatic recoveries from occasional malformed JSON on the
 first attempt (Ollama's `llava` model), caught by schema validation and
 successfully retried per `MAX_VISION_RETRIES`:
 
-![Batch job completed with retries](./Image1.png)
+![Batch job completed with retries](./evidence/Image1.png)
 
 ```json
 {
@@ -104,7 +104,7 @@ successfully retried per `MAX_VISION_RETRIES`:
 across every attempt (including earlier cloud runs before the switch to
 local inference):
 
-![Cost summary across all jobs](./image4.png)
+![Cost summary across all jobs](./evidence/image4.png)
 
 ```json
 {

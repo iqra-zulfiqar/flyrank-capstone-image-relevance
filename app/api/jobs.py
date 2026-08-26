@@ -4,6 +4,7 @@ from sqlalchemy.orm import Session
 from app.db.database import get_db
 from app.db.models import Image, BatchJob
 from app.jobs.batch_runner import create_batch_job, run_vision_batch_job
+from app.jobs.embed_runner import run_embed_batch_job, count_pending_embeddings
 from app.schemas.image_metadata import BatchJobOut
 
 router = APIRouter(prefix="/jobs", tags=["jobs"])
@@ -46,6 +47,26 @@ def trigger_classification_job(
 
     job = create_batch_job(db, job_type="vision_classify", total_items=total_images)
     background_tasks.add_task(run_vision_batch_job, str(job.id))
+    return _to_job_out(job)
+
+
+@router.post("/embed", response_model=BatchJobOut)
+def trigger_embed_job(background_tasks: BackgroundTasks, db: Session = Depends(get_db)):
+    """
+    Embeds every unflagged image caption and every post that doesn't
+    have a vector yet. Run this after vision classification (Phase 2)
+    and after creating posts, before requesting ranked matches.
+    """
+    total_pending = count_pending_embeddings(db)
+    if total_pending == 0:
+        raise HTTPException(
+            status_code=400,
+            detail="Nothing to embed. Make sure images are classified "
+                   "(POST /jobs/classify) and posts exist (POST /posts).",
+        )
+
+    job = create_batch_job(db, job_type="embed", total_items=total_pending)
+    background_tasks.add_task(run_embed_batch_job, str(job.id))
     return _to_job_out(job)
 
 

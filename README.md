@@ -1,73 +1,109 @@
-# Phase 2 — Vision Understanding Pipeline
+# Phase 3 — Matching Engine + Mismatch Guard
 
-Implements: structured vision output + schema validation, low-confidence
-flagging, background batch processing with retries, and per-call cost
-tracking. Maps directly to the Phase 2 checklist in the capstone brief.
+Implements: embeddings for images + posts, similarity ranking, and the
+mismatch guard with human-readable rejection reasons. This is the
+production-critical part of the whole capstone — see DESIGN.md §3.
 
 ## Setup
 
 ```bash
-# 1. Start Postgres
-docker compose up -d
+# Additional local model needed (vision model from Phase 2 already pulled)
+ollama pull all-minilm
 
-# 2. Install deps
-pip install -r requirements.txt
+# Make sure Phase 2 is done first — images must be classified
+# (POST /jobs/classify) before they can be embedded/matched.
 
-# 3. Configure environment
-cp .env.example .env
-# fill in GEMINI_API_KEY (Google AI Studio, free tier, no card)
-# DATABASE_URL default already matches docker-compose.yml
-
-# 4. Make sure Phase 1's image corpus exists
-python seed_images.py   # if you haven't already
-
-# 5. Run the API
+# Restart the API if it isn't already running
 uvicorn app.main:app --reload
 ```
 
-API docs: http://localhost:8000/docs
+## Walkthrough
 
-## Walkthrough (Phase 2 gate: "all images tagged by the batch job, costs visible")
+### 1. Embed the image corpus
 
 ```bash
-# Register the ~50 images from data/images/manifest.json into the DB
-curl -X POST http://localhost:8000/images/register-from-manifest
-
-# Kick off the vision classification batch job (returns immediately)
-curl -X POST http://localhost:8000/jobs/classify
+curl -X POST http://localhost:8000/jobs/embed
 # -> {"id": "...", "status": "pending", "total_items": 50, ...}
 
-# Poll job status/progress
 curl http://localhost:8000/jobs/<job_id>
-# -> {"status": "running", "completed": 12, "failed": 0, ...}
-# ... poll again until status == "done"
-
-# Inspect results
-curl http://localhost:8000/images
-curl http://localhost:8000/images?flagged_only=true   # low-confidence / failed items
-
-# Check cost tracking (per-call, rolled up per job)
-curl http://localhost:8000/costs
+# poll until status == "done"
 ```
 
-## What satisfies each Definition-of-Done box (§6 of the brief)
+### 2. Create some posts (test seed — mirrors §7 "Realistic scope")
 
-| Box | Where |
+```bash
+curl -X POST http://localhost:8000/posts \
+  -H "Content-Type: application/json" \
+  -d '{"title": "The behavior of red foxes", "body": "Red foxes are highly adaptable animals found across many habitats, from forests to urban edges. Vulpes vulpes is known for its cunning and varied diet."}'
+
+curl -X POST http://localhost:8000/posts \
+  -H "Content-Type: application/json" \
+  -d '{"title": "Living with wolves in the wild", "body": "Gray wolves are apex predators that live and hunt in coordinated packs."}'
+
+curl -X POST http://localhost:8000/posts \
+  -H "Content-Type: application/json" \
+  -d '{"title": "A guide to houseplants", "body": "This post has nothing to do with any animal in the corpus, to test the no-confident-match path."}'
+```
+
+Each `POST /posts` response includes `has_embedding: true` once embedded
+inline. Copy the `id` from the fox post — call it `FOX_POST_ID` below.
+
+### 3. Probe 2 — fox post ranks the fox image first
+
+```bash
+curl http://localhost:8000/posts/FOX_POST_ID/images
+```
+Expected: `matched: true`, `suggested_image_id` pointing at a fox photo,
+and the `candidates` list shows fox images ranked above wolf/dog/bear/deer.
+
+### 4. Probe 3 — force the wolf as a candidate for the fox post
+
+```bash
+curl -X POST http://localhost:8000/posts/FOX_POST_ID/force-match/WOLF_IMAGE_ID
+```
+Expected:
+```json
+{
+  "guard_passed": false,
+  "guard_reason": "Category mismatch: expected 'fox', detected 'wolf'"
+}
+```
+(Get a `WOLF_IMAGE_ID` from `GET /images` — find one where `subject`
+contains "wolf".)
+
+### 5. Probe 4 — no confident match
+
+```bash
+curl http://localhost:8000/posts/<houseplants_post_id>/images
+```
+Expected: `matched: false`, with a `reason` explaining why (similarity
+below threshold, or no known subject overlap).
+
+### 6. Review workflow
+
+```bash
+curl -X POST http://localhost:8000/suggestions/<suggestion_id>/approve
+curl -X POST http://localhost:8000/suggestions/<suggestion_id>/reject
+curl http://localhost:8000/suggestions/<suggestion_id>
+```
+Note: approving a suggestion the guard rejected (`guard_passed: false`)
+is blocked with a 400 — the guard's verdict can't be silently overridden
+through the review API.
+
+### 7. Eval — top-1 precision (Phase 4 will formalize this into a script)
+
+For now, manually run `GET /posts/{id}/images` against each of the 5
+categories' test posts and check whether the top-ranked, guard-passed
+suggestion matches the intended category. That ratio is your top-1
+precision number for the README.
+
+## How this satisfies the Phase 3 checklist (§8)
+
+| Requirement | Where |
 |---|---|
-| Vision output validated against schema; invalid never trusted | `app/schemas/image_metadata.py` (`ImageMetadata`) + `app/services/vision.py` (`classify_image` — retries then flags on `ValidationError`/`JSONDecodeError`) |
-| Low-confidence flagged, not accepted | `classify_image` — `confidence < LOW_CONFIDENCE_THRESHOLD` → `is_flagged=True` |
-| Batch background job with retries | `app/jobs/batch_runner.py` + `BackgroundTasks` in `app/api/jobs.py`; per-attempt retry inside `classify_image` |
-| Vision costs tracked per call | `ImageMetadata.cost_usd` per row, rolled up in `BatchJob.total_cost_usd`, exposed via `GET /costs` |
-
-## Notes / honesty for BUILDLOG.md
-
-- `gemini-2.0-flash` is being retired by Google — this pipeline defaults to
-  `gemini-2.5-flash` via `GEMINI_VISION_MODEL` in `.env`. Check
-  https://ai.google.dev/gemini-api/docs/models if it 404s for you and swap
-  the env var — no code change needed.
-- Cost figures (`COST_PER_IMAGE_CALL_USD`) are rough placeholders since
-  free-tier calls are actually $0 — the point of Phase 2 is the *habit* of
-  attributing cost per call, not the exact number. Update against
-  https://ai.google.dev/pricing if you want it accurate.
-- The batch job is idempotent: re-running `/jobs/classify` skips images
-  that already have metadata, so a partial failure is safe to resume.
+| Embeddings for images + posts | `app/services/embeddings.py`, `app/jobs/embed_runner.py` |
+| Similarity search + ranking | `app/services/matching.py` (`rank_candidates`) |
+| Semantic matching across wording | Embedding-based, not keyword — "red fox" and "Vulpes vulpes" land close in vector space |
+| Mismatch guard rejects wrong candidates | `app/services/guard.py` (`evaluate_guard`) — confidence floor → similarity floor → subject/category match, in order |
+| Rejections include human-readable explanation | Every guard failure returns a specific `reason` string, never a bare boolean |
+| "No confident match" + reasons | `GET /posts/{id}/images` returns `matched: false` with the top candidate's rejection reason when nothing passes |

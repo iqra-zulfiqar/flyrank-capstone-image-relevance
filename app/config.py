@@ -42,9 +42,25 @@ class Settings:
     COST_PER_IMAGE_CALL_USD: float = float(os.getenv("COST_PER_IMAGE_CALL_USD", "0.0"))
     COST_PER_EMBEDDING_CALL_USD: float = float(os.getenv("COST_PER_EMBEDDING_CALL_USD", "0.00002"))
 
+    # --- Embedding provider switch (Phase 3) ---
+    # Same reasoning as vision: default to local Ollama to avoid any
+    # repeat of the Gemini free-tier quota problems from Phase 2.
+    EMBEDDING_PROVIDER: str = os.getenv("EMBEDDING_PROVIDER", "ollama")
+    OLLAMA_EMBEDDING_MODEL: str = os.getenv("OLLAMA_EMBEDDING_MODEL", "all-minilm")
+
     # --- Rate limiting (only meaningful for the Gemini path) ---
     RATE_LIMIT_DELAY_SECONDS: float = float(os.getenv("RATE_LIMIT_DELAY_SECONDS", "0.0"))
-    SIMILARITY_THRESHOLD: float = float(os.getenv("SIMILARITY_THRESHOLD", "0.75"))
+    SIMILARITY_THRESHOLD: float = float(os.getenv("SIMILARITY_THRESHOLD", "0.5"))
+
+    # --- Mismatch guard (Phase 3) ---
+    # The corpus was deliberately built around these five animal
+    # categories (see DESIGN.md §7) specifically so the guard has a
+    # real fox/wolf visual-similarity trap to defend against. Used to
+    # detect a post's expected subject and compare it against a
+    # candidate image's detected subject.
+    GUARD_KNOWN_SUBJECTS: list[str] = os.getenv(
+        "GUARD_KNOWN_SUBJECTS", "fox,wolf,dog,bear,deer"
+    ).split(",")
 
 
 settings = Settings()
