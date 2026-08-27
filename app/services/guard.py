@@ -12,14 +12,28 @@ from typing import Optional
 
 from app.config import settings
 
+# Maps each known subject to every surface form worth matching as a
+# substring. Needed because plain substring matching on the base word
+# misses irregular plurals — "wolf" is NOT a substring of "wolves"
+# (w-o-l-v-e-s has no "f"), so a post that only ever says "wolves"
+# would silently skip the category check without this. Caught by
+# tests/test_guard.py::test_finds_wolf during Phase 4 test-writing.
+SUBJECT_VARIANTS = {
+    "fox": ["fox", "foxes"],
+    "wolf": ["wolf", "wolves"],
+    "dog": ["dog", "dogs"],
+    "bear": ["bear", "bears"],
+    "deer": ["deer"],  # same singular/plural
+}
+
 
 def extract_known_subject(text: str) -> Optional[str]:
     """
     Looks for one of the corpus's known animal subjects (fox, wolf, dog,
-    bear, deer) as a substring in the given text. Used to figure out
-    what a blog post is actually about, and separately what an image's
-    detected subject/attributes actually contain, so the two can be
-    compared.
+    bear, deer) — including common plural forms — as a substring in the
+    given text. Used to figure out what a blog post is actually about,
+    and separately what an image's detected subject/attributes actually
+    contain, so the two can be compared.
 
     Returns None if no known subject is mentioned — in that case the
     guard skips the subject-match check entirely rather than rejecting
@@ -29,7 +43,8 @@ def extract_known_subject(text: str) -> Optional[str]:
     text_lower = text.lower()
     for subject in settings.GUARD_KNOWN_SUBJECTS:
         subject = subject.strip().lower()
-        if subject and subject in text_lower:
+        variants = SUBJECT_VARIANTS.get(subject, [subject])
+        if any(variant in text_lower for variant in variants):
             return subject
     return None
 

@@ -268,3 +268,75 @@ used to silently override the guard's safety verdict:
 Satisfied by the fox-post-matched and guard-rejects-wolf evidence above.
 
 ---
+
+Phase 4 — Production Layer (Tests + Eval)
+✅ Automated tests cover schema validation, mismatch rejection, and matching accuracy
+
+pytest tests/ -v — 28 deterministic unit tests, no DB or network required (pure-function tests against ImageMetadata, evaluate_guard, cosine_similarity, and rank_candidates):
+
+collected 28 items
+
+tests/test_guard.py::TestExtractKnownSubject::test_finds_fox PASSED
+tests/test_guard.py::TestExtractKnownSubject::test_finds_wolf PASSED
+tests/test_guard.py::TestExtractKnownSubject::test_case_insensitive PASSED
+tests/test_guard.py::TestExtractKnownSubject::test_returns_none_when_no_known_subject PASSED
+tests/test_guard.py::TestEvaluateGuard::test_the_fox_wolf_scenario_is_rejected PASSED
+tests/test_guard.py::TestEvaluateGuard::test_matching_subject_passes PASSED
+tests/test_guard.py::TestEvaluateGuard::test_flagged_image_is_rejected_regardless_of_similarity PASSED
+tests/test_guard.py::TestEvaluateGuard::test_low_confidence_image_is_rejected PASSED
+tests/test_guard.py::TestEvaluateGuard::test_low_similarity_is_rejected_when_categories_dont_conflict PASSED
+tests/test_guard.py::TestEvaluateGuard::test_post_with_no_known_subject_skips_category_check PASSED
+tests/test_guard.py::TestEvaluateGuard::test_same_category_different_wording_passes PASSED
+tests/test_matching.py::TestCosineSimilarity::test_identical_vectors_give_similarity_one PASSED
+tests/test_matching.py::TestCosineSimilarity::test_orthogonal_vectors_give_similarity_zero PASSED
+tests/test_matching.py::TestCosineSimilarity::test_opposite_vectors_give_similarity_negative_one PASSED
+tests/test_matching.py::TestCosineSimilarity::test_zero_vector_returns_zero_not_a_crash PASSED
+tests/test_matching.py::TestCosineSimilarity::test_mismatched_dimensions_raises PASSED
+tests/test_matching.py::TestCosineSimilarity::test_scale_invariance PASSED
+tests/test_matching.py::TestRankCandidates::test_most_similar_ranks_first PASSED
+tests/test_matching.py::TestRankCandidates::test_empty_candidate_list_returns_empty PASSED
+tests/test_matching.py::TestRankCandidates::test_preserves_all_metadata_fields PASSED
+tests/test_schema_validation.py::test_valid_metadata_is_accepted PASSED
+tests/test_schema_validation.py::test_missing_required_field_is_rejected PASSED
+tests/test_schema_validation.py::test_invalid_category_enum_is_rejected PASSED
+tests/test_schema_validation.py::test_confidence_out_of_range_is_rejected PASSED
+tests/test_schema_validation.py::test_confidence_negative_is_rejected PASSED
+tests/test_schema_validation.py::test_caption_too_short_is_rejected PASSED
+tests/test_schema_validation.py::test_attributes_are_cleaned_of_empty_strings PASSED
+tests/test_schema_validation.py::test_subject_and_caption_are_stripped PASSED
+
+28 passed, 2 warnings in 0.90s
+
+Notably, test_finds_wolf caught a real bug during development — see BUILDLOG.md for the wolves/plural-matching fix this test forced.
+
+✅ A small labeled evaluation dataset measures top-1 precision
+
+python eval/run_eval.py against the live system (eval/labeled_set.json, 6 posts — one per animal category plus one deliberate no-match case):
+
+======================================================================
+TOP-1 PRECISION: 66.67% (4/6)
+======================================================================
+[PASS] The behavior of red foxes
+       expected: fox
+       matched 'red fox' (similarity 0.64)
+[PASS] Living with wolves in the wild
+       expected: wolf
+       matched 'wolf pack' (similarity 0.68)
+[FAIL] Why dogs make great companions
+       expected: dog
+       expected a match but got none: Similarity 0.34 below threshold 0.50
+[PASS] The diet of North American bears
+       expected: bear
+       matched 'bears' (similarity 0.51)
+[FAIL] Deer migration patterns in autumn
+       expected: deer
+       expected a match but got none: Similarity 0.49 below threshold 0.50
+[PASS] A guide to houseplants
+       expected: (no match expected)
+       correctly found no match: Similarity 0.30 below threshold 0.50
+
+Both failures are the guard correctly declining to guess (not false positives) — see README.md's Evaluation Result section for the full discussion of the threshold tradeoff this reveals.
+
+✅ README with architecture explanation + diagram; submission-pack files present
+
+See README.md — architecture diagram, setup, seed steps, troubleshooting, honest limitations. Submission pack complete: README.md, capstone.yaml, EVIDENCE.md (this file), BUILDLOG.md, .env.example.

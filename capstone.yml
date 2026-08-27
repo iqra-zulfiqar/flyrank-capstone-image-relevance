@@ -1,0 +1,54 @@
+name: image-relevance-auto-tagging
+description: >
+  AI Image Understanding & Content Matching Engine — classifies an image
+  corpus, embeds images and posts, ranks candidates by semantic
+  similarity, and applies a mismatch guard that rejects wrong pairings
+  with a human-readable reason instead of always suggesting something.
+
+run: |
+  docker compose up -d
+  python -m uvicorn app.main:app --reload
+
+seed: |
+  python seed_images.py
+  curl -X POST http://localhost:8000/images/register-from-manifest
+  curl -X POST http://localhost:8000/jobs/classify
+  curl -X POST http://localhost:8000/jobs/embed
+
+test: |
+  pytest tests/ -v
+  python eval/run_eval.py
+
+base_url: http://localhost:8000
+
+endpoints:
+  - method: POST
+    path: /images/register-from-manifest
+    description: Registers the seeded image corpus into the database.
+  - method: POST
+    path: /jobs/classify
+    description: Runs vision classification (Ollama llava) as a background batch job.
+  - method: POST
+    path: /jobs/embed
+    description: Embeds classified image captions and post content (Ollama all-minilm).
+  - method: GET
+    path: /jobs/{job_id}
+    description: Poll batch job progress, retries, and per-job cost.
+  - method: POST
+    path: /posts
+    description: Create a post; embeds it inline.
+  - method: GET
+    path: /posts/{post_id}/images
+    description: Core matching endpoint — ranks candidates, runs the mismatch guard, returns a suggestion or "no confident match".
+  - method: POST
+    path: /posts/{post_id}/force-match/{image_id}
+    description: Demo endpoint — forces a specific image as a candidate and runs the guard against it directly (reproduces the fox/wolf rejection on command).
+  - method: POST
+    path: /suggestions/{suggestion_id}/approve
+    description: Approve a suggestion. Blocked with 400 if the guard rejected it.
+  - method: POST
+    path: /suggestions/{suggestion_id}/reject
+    description: Reject a suggestion.
+  - method: GET
+    path: /costs
+    description: Per-call and per-job cost tracking.

@@ -1,0 +1,38 @@
+[
+  {
+    "title": "The behavior of red foxes",
+    "body": "Red foxes are highly adaptable animals found across many habitats, from forests to urban edges. Vulpes vulpes is known for its cunning and varied diet.",
+    "expected_category": "fox",
+    "expect_match": true
+  },
+  {
+    "title": "Living with wolves in the wild",
+    "body": "Gray wolves are apex predators that live and hunt in coordinated packs across remote wilderness.",
+    "expected_category": "wolf",
+    "expect_match": true
+  },
+  {
+    "title": "Why dogs make great companions",
+    "body": "Domestic dogs have been bred alongside humans for thousands of years and remain one of the most loyal household pets.",
+    "expected_category": "dog",
+    "expect_match": true
+  },
+  {
+    "title": "The diet of North American bears",
+    "body": "Bears are omnivorous and their diet shifts seasonally between berries, fish, and small mammals depending on availability.",
+    "expected_category": "bear",
+    "expect_match": true
+  },
+  {
+    "title": "Deer migration patterns in autumn",
+    "body": "Deer populations shift their range seasonally, often moving toward lower elevations as temperatures drop in autumn.",
+    "expected_category": "deer",
+    "expect_match": true
+  },
+  {
+    "title": "A guide to houseplants",
+    "body": "This post has nothing to do with any animal in the corpus. It covers watering schedules and light requirements for common indoor plants.",
+    "expected_category": null,
+    "expect_match": false
+  }
+]
