@@ -1,12 +1,12 @@
-# AI Image Understanding & Content Matching Engine
+# Image Relevance & Auto-Tagging
 
 Understands an image library, tags it automatically, and matches the
-right image to the right blog post based on meaning — a red-fox post
+right image to the right blog post based on meaning, a red-fox post
 gets a red-fox photo, never a wolf. Refuses to guess when nothing is a
 confident enough match.
 
 **Stack:** Python + FastAPI · PostgreSQL (Docker) · Pydantic · Ollama
-(`llava` for vision, `all-minilm` for embeddings — fully local, $0, no
+(`llava` for vision, `all-minilm` for embeddings fully local, $0, no
 API keys, no rate limits)
 
 ## Architecture
@@ -101,7 +101,7 @@ python eval/run_eval.py   # requires the API running + corpus classified/embedde
 
 ## Evaluation result
 
-Top-1 precision on the labeled set (`eval/labeled_set.json`, 6 posts —
+Top-1 precision on the labeled set (`eval/labeled_set.json`, 6 posts
 one per animal category plus one deliberate no-match case), measured
 against a live run:
 
@@ -117,15 +117,15 @@ against a live run:
 ```
 
 Both failures are the guard correctly **refusing to guess** rather than
-false positives — the dog and deer posts scored just below the
+false positives, the dog and deer posts scored just below the
 similarity threshold (0.34 and 0.49 respectively) with `all-minilm`.
 The deer case in particular sits right at the boundary (0.49 vs. 0.50),
 suggesting the threshold could be lowered slightly to trade a bit of
-guard strictness for higher recall — a real tuning decision, not
+guard strictness for higher recall, a real tuning decision, not
 something to paper over. Kept at 0.5 for this submission since a
 stricter guard erring toward "no confident match" over a wrong
 suggestion matches the brief's own stated priority (§1: "The most
-important production feature is not finding a match — it is avoiding a
+important production feature is not finding a match, it is avoiding a
 wrong match").
 
 Run it yourself: `python eval/run_eval.py` (requires the API running
@@ -133,7 +133,7 @@ with the corpus classified and embedded).
 
 ## Limitations (honest)
 
-- **Category detection is keyword-based**, not a second model call — it
+- **Category detection is keyword-based**, not a second model call, it
   looks for one of five known animal names (with basic plural handling)
   as a substring in post text and image tags. This is fast and fully
   explainable, but won't generalize past this five-category demo corpus
